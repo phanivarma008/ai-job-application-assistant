@@ -1,0 +1,63 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: ai-job-assistant-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:jobassistantdb}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 3
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 3000ms
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+# OpenAI Configuration
+openai:
+  api:
+    key: ${OPENAI_API_KEY:your-openai-api-key-here}
+    url: https://api.openai.com/v1/chat/completions
+  model: gpt-4-turbo-preview
+
+# Security
+security:
+  jwt:
+    secret: ${JWT_SECRET:my-256-bit-secret-key-for-dev-only}
+
+# CORS for React frontend
+cors:
+  allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus, info, metrics
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    com.ai.jobassistant: INFO
+    org.springframework.security: WARN

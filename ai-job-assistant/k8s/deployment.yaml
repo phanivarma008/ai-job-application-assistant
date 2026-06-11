@@ -1,0 +1,119 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-platform
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-job-assistant-service
+  namespace: ai-platform
+  labels:
+    app: ai-job-assistant-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-job-assistant-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-job-assistant-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8083"
+    spec:
+      containers:
+        - name: ai-job-assistant-service
+          image: <YOUR_ECR_REGISTRY>/ai-job-assistant-service:latest
+          ports:
+            - containerPort: 8083
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-secrets
+                  key: openai-api-key
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ai-db-secret
+                  key: password
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-config
+                  key: redis-host
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /api/v1/assistant/health
+              port: 8083
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-job-assistant-service
+  namespace: ai-platform
+spec:
+  selector:
+    app: ai-job-assistant-service
+  ports:
+    - port: 80
+      targetPort: 8083
+  type: ClusterIP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-job-assistant-hpa
+  namespace: ai-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-job-assistant-service
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-config
+  namespace: ai-platform
+data:
+  redis-host: "redis-service"
+  kafka-servers: "kafka-service:9092"
+  openai-model: "gpt-4-turbo-preview"

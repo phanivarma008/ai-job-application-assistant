@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+
+  ai-job-assistant-service:
+    build:
+      context: ./ai-job-assistant-service
+      dockerfile: Dockerfile
+    container_name: ai-job-assistant-service
+    ports:
+      - "8083:8083"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=jobassistantdb
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - JWT_SECRET=my-super-secret-jwt-key-256-bits-long-for-development
+      - CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ai-job-assistant-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - ai-job-assistant-service
+    networks:
+      - ai-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: jobassistantdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: ai-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - ai-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: ai-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+    networks:
+      - ai-network
+
+volumes:
+  postgres_data:
+
+networks:
+  ai-network:
+    driver: bridge
